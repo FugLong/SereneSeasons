@@ -55,65 +55,25 @@ public class SeasonColorHandlers
 
     private static int resolveColors(ResolverType type, Biome biome, double x, double z)
     {
-        // This is called by BiomeColors.RESOLVER which DH uses for LOD chunks
-        // We need to apply seasonal colors the SAME WAY as the block color providers do
-
-        Minecraft minecraft = Minecraft.getInstance();
-        Level level = minecraft.level;
-
-        if (level == null)
-        {
-            // No level context, return vanilla color
-            return switch (type) {
-                case GRASS -> originalGrassColorResolver.getColor(biome, x, z);
-                case FOLIAGE -> originalFoliageColorResolver.getColor(biome, x, z);
-            };
-        }
-
-        // We need to get a Holder<Biome> from the Biome object to check tags
-        // The biome parameter DH passes us is the correct one, we just need to wrap it in a holder
-        Registry<Biome> biomeRegistry = level.registryAccess().lookupOrThrow(Registries.BIOME);
-
-        // Try to get the resource key for this biome, then look up the holder
-        Optional<ResourceKey<Biome>> biomeKey = biomeRegistry.getResourceKey(biome);
-        if (biomeKey.isEmpty())
-        {
-            // Can't find the biome key, fall back to vanilla color
-            return switch (type) {
-                case GRASS -> originalGrassColorResolver.getColor(biome, x, z);
-                case FOLIAGE -> originalFoliageColorResolver.getColor(biome, x, z);
-            };
-        }
-
-        // Now get the holder from the key
-        Optional<Holder.Reference<Biome>> holderOpt = biomeRegistry.get(biomeKey.get());
-        if (holderOpt.isEmpty())
-        {
-            // Can't find the holder, fall back to vanilla color
-            return switch (type) {
-                case GRASS -> originalGrassColorResolver.getColor(biome, x, z);
-                case FOLIAGE -> originalFoliageColorResolver.getColor(biome, x, z);
-            };
-        }
-
-        Holder<Biome> biomeHolder = holderOpt.get();
-
-        // Get the original vanilla color using the biome parameter DH passed us
         int originalColor = switch (type) {
             case GRASS -> originalGrassColorResolver.getColor(biome, x, z);
             case FOLIAGE -> originalFoliageColorResolver.getColor(biome, x, z);
         };
 
-        // Special handling: Dark forest biomes should use evergreen color as base for foliage
-        // This matches how vanilla dark oak leaves work
-        if (type == ResolverType.FOLIAGE && biomeKey.get().location().getPath().contains("dark_forest"))
+        Minecraft minecraft = Minecraft.getInstance();
+        Level level = minecraft.level;
+
+        if (level == null) return originalColor;
+
+        Registry<Biome> biomeRegistry = level.registryAccess().lookupOrThrow(Registries.BIOME);
+        Holder.Reference<Biome> biomeHolder = biomeRegistry.getResourceKey(biome).flatMap(biomeRegistry::get).orElse(null);
+
+        if (biomeHolder != null)
         {
-            originalColor = FoliageColor.FOLIAGE_EVERGREEN;
+            return getSeasonalColor(level, biomeHolder, x, z, type, originalColor);
         }
 
-        // Now call getSeasonalColor() with the proper holder AND the original color
-        // This matches how it was done in 1.21.8
-        return getSeasonalColor(level, biomeHolder, x, z, type, originalColor);
+        return originalColor;
     }
 
     public static int getSeasonalColor(@Nullable Level level, Holder<Biome> biomeHolder, double x, double z, ResolverType type)
